@@ -12,4 +12,3 @@ phpstan-bootstrap.php
 phpunit.xml.dist
 CLAUDE.md
 README.md
-beacon-audit-wordpress-plugin-plan.md

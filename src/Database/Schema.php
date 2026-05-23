@@ -147,4 +147,24 @@ final class Schema {
 			);
 		}
 	}
+
+	/**
+	 * Drop every plugin table. Use on uninstall only.
+	 *
+	 * @return void
+	 */
+	public static function drop_tables(): void {
+		global $wpdb;
+
+		$tables = [
+			self::table_interactions(),
+			self::table_article_refs(),
+			self::table_reports(),
+		];
+
+		foreach ( $tables as $table ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->query( "DROP TABLE IF EXISTS `{$table}`" );
+		}
+	}
 }

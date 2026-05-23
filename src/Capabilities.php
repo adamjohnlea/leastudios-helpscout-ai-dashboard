@@ -13,7 +13,7 @@ namespace LEAStudios\HelpScoutAIDashboard;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Capability constants and install/uninstall helpers.
+ * Capability constants and add/remove helpers.
  */
 final class Capabilities {
 
@@ -25,7 +25,7 @@ final class Capabilities {
 	 *
 	 * @return void
 	 */
-	public static function install(): void {
+	public static function add(): void {
 		$admin  = get_role( 'administrator' );
 		$editor = get_role( 'editor' );
 
@@ -44,13 +44,21 @@ final class Capabilities {
 	 *
 	 * @return void
 	 */
-	public static function uninstall(): void {
-		foreach ( wp_roles()->roles as $role_name => $_unused ) {
-			$role = get_role( $role_name );
-			if ( $role instanceof \WP_Role ) {
-				$role->remove_cap( self::MANAGE );
-				$role->remove_cap( self::VIEW );
+	public static function remove(): void {
+		global $wp_roles;
+
+		if ( ! $wp_roles instanceof \WP_Roles ) {
+			return;
+		}
+
+		foreach ( array_keys( $wp_roles->roles ) as $role_name ) {
+			$role = get_role( (string) $role_name );
+			if ( null === $role ) {
+				continue;
 			}
+
+			$role->remove_cap( self::MANAGE );
+			$role->remove_cap( self::VIEW );
 		}
 	}
 }

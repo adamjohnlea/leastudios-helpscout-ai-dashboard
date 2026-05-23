@@ -25,6 +25,6 @@ final class Activation {
 	 */
 	public function run(): void {
 		Schema::install();
-		Capabilities::install();
+		Capabilities::add();
 	}
 }
