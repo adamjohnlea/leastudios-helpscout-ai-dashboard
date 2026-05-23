@@ -12,6 +12,7 @@ namespace LEAStudios\HelpScoutAIDashboard;
 
 use LEAStudios\HelpScoutAIDashboard\Admin\Admin;
 use LEAStudios\HelpScoutAIDashboard\REST\Reports_Controller;
+use LEAStudios\HelpScoutAIDashboard\REST\Settings_Controller;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -41,6 +42,7 @@ final class Plugin {
 	 */
 	public function register_rest_routes(): void {
 		( new Reports_Controller() )->register_routes();
+		( new Settings_Controller() )->register_routes();
 	}
 
 	/**

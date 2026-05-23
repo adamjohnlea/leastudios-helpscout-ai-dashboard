@@ -20,7 +20,8 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Admin {
 
-	private const MENU_SLUG_REPORTS = 'leastudios-helpscout-ai-dashboard-reports';
+	private const MENU_SLUG_REPORTS  = 'leastudios-helpscout-ai-dashboard-reports';
+	private const MENU_SLUG_SETTINGS = 'leastudios-helpscout-ai-dashboard-settings';
 
 	/**
 	 * Hook into WordPress.
@@ -33,7 +34,7 @@ final class Admin {
 	}
 
 	/**
-	 * Register the top-level menu + Reports submenu.
+	 * Register the top-level menu + Reports + Settings submenus.
 	 *
 	 * @return void
 	 */
@@ -56,6 +57,15 @@ final class Admin {
 			self::MENU_SLUG_REPORTS,
 			[ $this, 'render_reports_page' ]
 		);
+
+		add_submenu_page(
+			self::MENU_SLUG_REPORTS,
+			__( 'Settings', 'leastudios-helpscout-ai-dashboard' ),
+			__( 'Settings', 'leastudios-helpscout-ai-dashboard' ),
+			Capabilities::MANAGE,
+			self::MENU_SLUG_SETTINGS,
+			[ $this, 'render_settings_page' ]
+		);
 	}
 
 	/**
@@ -71,6 +81,18 @@ final class Admin {
 	}
 
 	/**
+	 * Render the Settings page.
+	 *
+	 * @return void
+	 */
+	public function render_settings_page(): void {
+		if ( ! current_user_can( Capabilities::MANAGE ) ) {
+			wp_die( esc_html__( 'Forbidden', 'leastudios-helpscout-ai-dashboard' ) );
+		}
+		require LEASTUDIOS_HELPSCOUT_AI_DASHBOARD_DIR . 'templates/settings.php';
+	}
+
+	/**
 	 * Enqueue assets only on this plugin's admin pages.
 	 *
 	 * @param string $hook Current admin page hook suffix.
@@ -78,20 +100,26 @@ final class Admin {
 	 * @return void
 	 */
 	public function enqueue( string $hook ): void {
-		if ( false === strpos( $hook, self::MENU_SLUG_REPORTS ) ) {
+		$is_settings = false !== strpos( $hook, self::MENU_SLUG_SETTINGS );
+		$is_reports  = ! $is_settings && false !== strpos( $hook, self::MENU_SLUG_REPORTS );
+
+		if ( ! $is_reports && ! $is_settings ) {
 			return;
 		}
 
+		$handle = $is_settings ? 'lshsaid-settings' : 'lshsaid-reports';
+		$src    = $is_settings ? 'assets/js/settings.js' : 'assets/js/reports.js';
+
 		wp_enqueue_script(
-			'lshsaid-reports',
-			LEASTUDIOS_HELPSCOUT_AI_DASHBOARD_URL . 'assets/js/reports.js',
+			$handle,
+			LEASTUDIOS_HELPSCOUT_AI_DASHBOARD_URL . $src,
 			[],
 			LEASTUDIOS_HELPSCOUT_AI_DASHBOARD_VERSION,
 			true
 		);
 
 		wp_localize_script(
-			'lshsaid-reports',
+			$handle,
 			'LSHSAID',
 			[
 				'rest'  => esc_url_raw( rest_url( Reports_Controller::REST_NAMESPACE . '/' ) ),
