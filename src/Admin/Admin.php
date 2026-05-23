@@ -1,7 +1,8 @@
 <?php
 /**
- * Admin menu pages and asset enqueueing. Pages are added in phases; this
- * file is updated in Phase 3 (settings) and Phase 4 (dashboard).
+ * Admin pages and asset enqueuing. Wires Dashboard (default landing),
+ * Reports (CSV upload + management), and Settings (Beacon -> site map)
+ * submenus under a single "Help Scout AI" top-level menu.
  *
  * @package LEAStudios\HelpScoutAIDashboard
  */

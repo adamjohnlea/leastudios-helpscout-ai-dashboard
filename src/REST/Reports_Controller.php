@@ -1,7 +1,9 @@
 <?php
 /**
- * REST controller for the Reports resource (CSV uploads + delete-by-source).
- * The dashboard read endpoint is added in Phase 4.
+ * REST controller for the Reports resource. Exposes CSV upload
+ * (POST /reports), report deletion with cascade through interactions
+ * and article_refs (DELETE /reports/{id}), and the dashboard
+ * aggregation read (GET /dashboard).
  *
  * @package LEAStudios\HelpScoutAIDashboard
  */

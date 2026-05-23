@@ -18,7 +18,9 @@ use LEAStudios\HelpScoutAIDashboard\REST\Settings_Controller;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Top-level plugin entry. Phase 2 adds Admin pages + REST routes.
+ * Main plugin bootstrap. Loads textdomain, registers REST controllers
+ * (Reports, Settings), instantiates the Admin pages when in wp-admin,
+ * and registers WP-CLI commands when WP_CLI is defined.
  */
 final class Plugin {
 
