@@ -11,7 +11,7 @@
 
 declare(strict_types=1);
 
-namespace LEAStudios\HelpScoutAIDashboard\Tests;
+namespace LEAStudios\Tests;
 
 use LEAStudios\HelpScoutAIDashboard\Database\Schema;
 

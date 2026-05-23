@@ -9,7 +9,7 @@ namespace LEAStudios\HelpScoutAIDashboard\Tests\Integration;
 
 use LEAStudios\HelpScoutAIDashboard\Capabilities;
 use LEAStudios\HelpScoutAIDashboard\REST\Reports_Controller;
-use LEAStudios\HelpScoutAIDashboard\Tests\TestCase;
+use LEAStudios\Tests\TestCase;
 use WP_REST_Request;
 
 final class ReportsControllerTest extends TestCase {

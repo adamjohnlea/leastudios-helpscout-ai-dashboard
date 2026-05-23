@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name:       LEA Studios Help Scout AI Dashboard
+ * Plugin Name:       leaStudios Help Scout AI Dashboard
  * Plugin URI:        https://leastudios.com/plugins/leastudios-helpscout-ai-dashboard
  * Description:       Imports Help Scout AI Beacon CSV exports and renders a weekly dashboard of customer interactions across Beacons.
  * Version:           1.0.0
@@ -31,7 +31,7 @@ if ( ! file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 		function () {
 			printf(
 				'<div class="notice notice-error"><p><strong>%s</strong>: %s</p></div>',
-				esc_html__( 'LEA Studios Help Scout AI Dashboard', 'leastudios-helpscout-ai-dashboard' ),
+				esc_html__( 'leaStudios Help Scout AI Dashboard', 'leastudios-helpscout-ai-dashboard' ),
 				esc_html__( 'Plugin dependencies are missing. Run "composer install" in the plugin directory.', 'leastudios-helpscout-ai-dashboard' )
 			);
 		}
@@ -65,7 +65,7 @@ add_action( 'plugins_loaded', 'leastudios_helpscout_ai_dashboard_init' );
 function leastudios_helpscout_ai_dashboard_php_version_notice(): void {
 	printf(
 		'<div class="notice notice-error"><p>%s</p></div>',
-		esc_html__( 'LEA Studios Help Scout AI Dashboard requires PHP 8.2 or higher.', 'leastudios-helpscout-ai-dashboard' )
+		esc_html__( 'leaStudios Help Scout AI Dashboard requires PHP 8.2 or higher.', 'leastudios-helpscout-ai-dashboard' )
 	);
 }
 

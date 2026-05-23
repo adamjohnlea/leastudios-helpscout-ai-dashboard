@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<ruleset name="LEA Studios Help Scout AI Dashboard">
-    <description>PHPCS ruleset for LEA Studios Help Scout AI Dashboard.</description>
+<ruleset name="leaStudios Help Scout AI Dashboard">
+    <description>PHPCS ruleset for leaStudios Help Scout AI Dashboard.</description>
 
     <file>.</file>
 
@@ -37,6 +37,7 @@
 
     <rule ref="PHPCompatibilityWP"/>
 
+    <!-- Relax docblock requirements in tests; test names are the documentation. -->
     <rule ref="Squiz.Commenting.FunctionComment.Missing">
         <exclude-pattern>tests/</exclude-pattern>
     </rule>

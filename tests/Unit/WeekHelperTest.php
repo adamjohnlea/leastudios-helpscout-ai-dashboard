@@ -8,7 +8,7 @@ declare(strict_types=1);
 namespace LEAStudios\HelpScoutAIDashboard\Tests\Unit;
 
 use LEAStudios\HelpScoutAIDashboard\Shared\Week_Helper;
-use LEAStudios\HelpScoutAIDashboard\Tests\TestCase;
+use LEAStudios\Tests\TestCase;
 
 final class WeekHelperTest extends TestCase {
 

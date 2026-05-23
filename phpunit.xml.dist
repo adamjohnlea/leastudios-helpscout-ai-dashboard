@@ -6,7 +6,7 @@
     beStrictAboutOutputDuringTests="true"
 >
     <testsuites>
-        <testsuite name="leastudios-helpscout-ai-dashboard">
+        <testsuite name="helpscout-ai-dashboard">
             <directory suffix="Test.php">./tests</directory>
         </testsuite>
     </testsuites>

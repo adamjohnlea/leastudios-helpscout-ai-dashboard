@@ -8,7 +8,7 @@ declare(strict_types=1);
 namespace LEAStudios\HelpScoutAIDashboard\Tests\Unit;
 
 use LEAStudios\HelpScoutAIDashboard\Database\Schema;
-use LEAStudios\HelpScoutAIDashboard\Tests\TestCase;
+use LEAStudios\Tests\TestCase;
 
 final class SchemaTest extends TestCase {
 

@@ -1,4 +1,4 @@
-=== LEA Studios Help Scout AI Dashboard ===
+=== leaStudios Help Scout AI Dashboard ===
 Contributors: leastudios
 Tags: helpscout, csv, dashboard, reporting
 Requires at least: 6.4
@@ -12,7 +12,7 @@ Import Help Scout AI Beacon CSV exports and render a weekly dashboard of custome
 
 == Description ==
 
-LEA Studios Help Scout AI Dashboard ingests the CSV exports produced by Help Scout's AI Beacon and turns them into a single weekly dashboard view across every Beacon you run. Upload one file or a folder of files, map each Beacon ID to a friendly site name once, and the dashboard rolls everything up into per-site weekly totals you can review at a glance.
+leaStudios Help Scout AI Dashboard ingests the CSV exports produced by Help Scout's AI Beacon and turns them into a single weekly dashboard view across every Beacon you run. Upload one file or a folder of files, map each Beacon ID to a friendly site name once, and the dashboard rolls everything up into per-site weekly totals you can review at a glance.
 
 = Who it's for =
 

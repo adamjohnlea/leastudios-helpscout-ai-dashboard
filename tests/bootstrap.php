@@ -1,6 +1,6 @@
 <?php
 /**
- * PHPUnit bootstrap for LEA Studios Help Scout AI Dashboard.
+ * PHPUnit bootstrap for leaStudios Help Scout AI Dashboard.
  *
  * @package LEAStudios\HelpScoutAIDashboard
  */
@@ -15,7 +15,7 @@ if ( ! $_tests_dir ) {
 
 if ( ! file_exists( "{$_tests_dir}/includes/functions.php" ) ) {
 	echo "Could not find {$_tests_dir}/includes/functions.php\n";
-	echo "Run: bash ../leastudios-dev-tools/bin/install-wp-tests.sh wordpress_test root '' 127.0.0.1 latest\n";
+	echo "Run: bash ../leastudios-dev-tools/bin/install-wp-tests.sh wordpress_test root '' localhost latest\n";
 	exit( 1 );
 }
 

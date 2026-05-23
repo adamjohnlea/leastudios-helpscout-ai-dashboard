@@ -11,7 +11,7 @@ use LEAStudios\HelpScoutAIDashboard\Capabilities;
 use LEAStudios\HelpScoutAIDashboard\Database\Schema;
 use LEAStudios\HelpScoutAIDashboard\REST\Reports_Controller;
 use LEAStudios\HelpScoutAIDashboard\REST\Settings_Controller;
-use LEAStudios\HelpScoutAIDashboard\Tests\TestCase;
+use LEAStudios\Tests\TestCase;
 use WP_REST_Request;
 
 final class SettingsControllerTest extends TestCase {

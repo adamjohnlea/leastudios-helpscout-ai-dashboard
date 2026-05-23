@@ -9,7 +9,7 @@ namespace LEAStudios\HelpScoutAIDashboard\Tests\Unit;
 
 use LEAStudios\HelpScoutAIDashboard\CSV\Importer;
 use LEAStudios\HelpScoutAIDashboard\Database\Schema;
-use LEAStudios\HelpScoutAIDashboard\Tests\TestCase;
+use LEAStudios\Tests\TestCase;
 use RuntimeException;
 
 final class CsvImporterTest extends TestCase {
