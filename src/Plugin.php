@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace LEAStudios\HelpScoutAIDashboard;
 
 use LEAStudios\HelpScoutAIDashboard\Admin\Admin;
+use LEAStudios\HelpScoutAIDashboard\CLI\Import_Command;
 use LEAStudios\HelpScoutAIDashboard\REST\Reports_Controller;
 use LEAStudios\HelpScoutAIDashboard\REST\Settings_Controller;
 
@@ -32,6 +33,12 @@ final class Plugin {
 
 		if ( is_admin() ) {
 			( new Admin() )->init();
+		}
+
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			$cli = new Import_Command();
+			\WP_CLI::add_command( 'lshsai import-file', [ $cli, 'import_file' ] );
+			\WP_CLI::add_command( 'lshsai import-folder', [ $cli, 'import_folder' ] );
 		}
 	}
 

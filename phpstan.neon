@@ -6,3 +6,4 @@ parameters:
         - phpstan-bootstrap.php
     scanDirectories:
         - vendor/php-stubs/wordpress-stubs
+        - vendor/php-stubs/wp-cli-stubs
