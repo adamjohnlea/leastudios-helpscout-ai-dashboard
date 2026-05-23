@@ -28,12 +28,18 @@ final class Reports_Controller extends WP_REST_Controller {
 	public const REST_NAMESPACE = 'leastudios-helpscout-ai-dashboard/v1';
 
 	/**
-	 * Wire base properties for WP_REST_Controller.
+	 * The REST namespace.
+	 *
+	 * @var string
 	 */
-	public function __construct() {
-		$this->namespace = self::REST_NAMESPACE;
-		$this->rest_base = 'reports';
-	}
+	protected $namespace = self::REST_NAMESPACE;
+
+	/**
+	 * The REST base.
+	 *
+	 * @var string
+	 */
+	protected $rest_base = 'reports';
 
 	/**
 	 * Register the routes.
@@ -118,10 +124,11 @@ final class Reports_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Handle DELETE /reports/{id} — remove the report and its interactions.
+	 * Handle DELETE /reports/{id} — cascade-delete the report and its data.
 	 *
-	 * Orphaned article_refs rows are intentionally left behind: nothing queries
-	 * them without an interaction join, and they're cleaned up lazily.
+	 * Cascades article_refs → interactions → reports, matching source behavior.
+	 * The article_refs delete must run BEFORE the interactions delete because
+	 * it joins on interactions to find the rows to remove.
 	 *
 	 * @param WP_REST_Request $request Incoming request.
 	 *
@@ -131,8 +138,15 @@ final class Reports_Controller extends WP_REST_Controller {
 		global $wpdb;
 		$report_id = (int) $request->get_param( 'id' );
 
+		$t_int = Schema::table_interactions();
+		$t_art = Schema::table_article_refs();
+
+		// Cascade: article_refs -> interactions -> report.
+		// Table names are controlled by Schema; $report_id is properly placeholdered.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-		$wpdb->query( $wpdb->prepare( 'DELETE FROM ' . Schema::table_interactions() . ' WHERE report_id = %d', $report_id ) );
+		$wpdb->query( $wpdb->prepare( "DELETE a FROM {$t_art} a JOIN {$t_int} i ON a.interaction_id = i.id WHERE i.report_id = %d", $report_id ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $t_int . ' WHERE report_id = %d', $report_id ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->delete( Schema::table_reports(), [ 'id' => $report_id ], [ '%d' ] );
 
