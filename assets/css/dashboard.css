@@ -1,0 +1,19 @@
+/* Shared admin styles for the AI Answers plugin pages. */
+.aiad-wrap .aiad-card {
+  background: #fff;
+  border: 1px solid #c3c4c7;
+  border-radius: 4px;
+  padding: 16px 20px;
+  margin: 16px 0;
+}
+.aiad-wrap .aiad-card h2.title { margin-top: 0; }
+
+.aiad-status { display: inline-block; margin-left: 12px; font-size: 13px; color: #50575e; }
+.aiad-status.ok  { color: #1d6f3f; }
+.aiad-status.err { color: #b71c1c; }
+
+#aiad-beacon-table input[type="text"] { width: 100%; }
+
+/* Dashboard host. The dashboard's own CSS is loaded inline by dashboard.php
+   to keep visual parity with the legacy single-file dashboard.html. */
+#aiad-dashboard-root { margin-top: 16px; }

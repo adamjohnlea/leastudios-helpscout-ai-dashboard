@@ -75,6 +75,18 @@ final class Reports_Controller extends WP_REST_Controller {
 				],
 			]
 		);
+
+		register_rest_route(
+			$this->namespace,
+			'/dashboard',
+			[
+				[
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'get_dashboard' ],
+					'permission_callback' => [ $this, 'check_view_cap' ],
+				],
+			]
+		);
 	}
 
 	/**
@@ -84,6 +96,15 @@ final class Reports_Controller extends WP_REST_Controller {
 	 */
 	public function check_manage_cap(): bool {
 		return current_user_can( Capabilities::MANAGE );
+	}
+
+	/**
+	 * Permission check: caller must hold the view capability.
+	 *
+	 * @return bool
+	 */
+	public function check_view_cap(): bool {
+		return current_user_can( Capabilities::VIEW );
 	}
 
 	/**
@@ -151,5 +172,176 @@ final class Reports_Controller extends WP_REST_Controller {
 		$wpdb->delete( Schema::table_reports(), [ 'id' => $report_id ], [ '%d' ] );
 
 		return new WP_REST_Response( [ 'deleted' => $report_id ], 200 );
+	}
+
+	/**
+	 * Handle GET /dashboard — return the full payload the dashboard frontend expects.
+	 *
+	 * Ported from the source plugin's get_payload() method. The shape mirrors
+	 * what the legacy build.py produced so the frontend filter/render logic is
+	 * reused untouched: { generated_at, generated_at_display, timezone,
+	 * reports, rows, sites, beacon_map, weeks }.
+	 *
+	 * Uses a cheap ETag fingerprint (max-id + counts + max-uploaded-at + beacon-map hash)
+	 * so unchanged datasets return 304 and skip the full JSON serialize.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function get_dashboard( WP_REST_Request $request ): WP_REST_Response {
+		global $wpdb;
+		$t_int = Schema::table_interactions();
+		$t_art = Schema::table_article_refs();
+		$t_rep = Schema::table_reports();
+
+		$beacon_map = (array) get_option( Schema::OPT_BEACON_MAP, [] );
+
+		// Cheap fingerprint of the dataset: changes when interactions are
+		// added/removed (id+count), when a report is uploaded/deleted, or
+		// when the Beacon map changes. Costs three indexed scalar queries.
+		// Browsers send `If-None-Match: <etag>` and we 304 on a match.
+		// Table names from Schema::table_*(); no user input.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$fp_parts = [
+			(int) $wpdb->get_var( "SELECT COALESCE(MAX(id), 0) FROM {$t_int}" ),
+			(int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_int}" ),
+			(string) $wpdb->get_var( "SELECT COALESCE(MAX(uploaded_at), '') FROM {$t_rep}" ),
+			(int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_rep}" ),
+			md5( (string) wp_json_encode( $beacon_map ) ),
+		];
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$etag = '"' . substr( md5( implode( '|', $fp_parts ) ), 0, 16 ) . '"';
+
+		// Apache's mod_deflate (and some CDNs) append `-gzip` / `-br` to ETags
+		// on compressed responses, so the value the browser sends back may not
+		// match what we minted. Strip those suffixes before comparing.
+		$inm = $request->get_header( 'if_none_match' );
+		if ( is_string( $inm ) && '' !== $inm ) {
+			$inm = trim( $inm );
+			$inm = (string) preg_replace( '/-(?:gzip|br|deflate)("?)$/', '$1', $inm );
+			if ( $etag === $inm ) {
+				$resp = new WP_REST_Response( null, 304 );
+				$resp->header( 'ETag', $etag );
+				$resp->header( 'Cache-Control', 'private, must-revalidate' );
+				return $resp;
+			}
+		}
+
+		// Stable site order to match the legacy frontend constants.
+		$site_order = [ 'CG Cookie', 'CG Cookie Docs', 'Superhive', 'Superhive Docs' ];
+
+		// Single SELECT for all interactions. occurred_at is stored in UTC;
+		// re-emit as ISO with `Z` suffix so the frontend's existing toCentral()
+		// helper handles it identically to the old payload.
+		// Table names from Schema::table_*(); no user input.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$rows_raw = $wpdb->get_results(
+			"SELECT id, session_id, occurred_at, week_ending, beacon_id, site,
+			        question, answer, answer_type, customer_id,
+			        session_resolution, session_end_reason, rating, comment,
+			        conversation_url, report_id
+			 FROM {$t_int}
+			 ORDER BY occurred_at DESC",
+			ARRAY_A
+		);
+
+		// Pull article refs in one query, group by interaction id.
+		$arts_raw = $wpdb->get_results(
+			"SELECT interaction_id, position, title, url FROM {$t_art} ORDER BY interaction_id, position",
+			ARRAY_A
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+
+		$arts_by_id = [];
+		foreach ( (array) $arts_raw as $a ) {
+			$iid                  = (int) $a['interaction_id'];
+			$arts_by_id[ $iid ][] = [
+				't' => $a['title'],
+				'u' => $a['url'],
+			];
+		}
+
+		$rows  = [];
+		$weeks = [];
+		foreach ( (array) $rows_raw as $r ) {
+			$id     = (int) $r['id'];
+			$rows[] = [
+				'sid'     => $r['session_id'],
+				'date'    => self::utc_datetime_to_iso( (string) $r['occurred_at'] ),
+				'q'       => $r['question'] ?? '',
+				'a'       => $r['answer'] ?? '',
+				'type'    => $r['answer_type'],
+				'cust'    => $r['customer_id'],
+				'res'     => $r['session_resolution'],
+				'end'     => $r['session_end_reason'],
+				'rating'  => $r['rating'],
+				'comment' => $r['comment'] ?? '',
+				'arts'    => $arts_by_id[ $id ] ?? [],
+				'conv'    => $r['conversation_url'],
+				'src'     => 'report:' . (int) $r['report_id'],
+				'beacon'  => $r['beacon_id'],
+				'site'    => $r['site'],
+				'week'    => $r['week_ending'],
+			];
+			if ( ! empty( $r['week_ending'] ) ) {
+				$weeks[ $r['week_ending'] ] = true;
+			}
+		}
+		$weeks = array_keys( $weeks );
+		sort( $weeks );
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$reports_raw = $wpdb->get_results(
+			"SELECT id, filename, uploaded_at, row_count, dupes_skipped,
+			        date_min, date_max, sites_json
+			 FROM {$t_rep}
+			 ORDER BY uploaded_at ASC",
+			ARRAY_A
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+
+		$reports = [];
+		foreach ( (array) $reports_raw as $rep ) {
+			$sites_decoded = json_decode( (string) $rep['sites_json'], true );
+			$reports[]     = [
+				'id'    => (int) $rep['id'],
+				'name'  => $rep['filename'],
+				'rows'  => (int) $rep['row_count'],
+				'dupes' => (int) $rep['dupes_skipped'],
+				'from'  => $rep['date_min'],
+				'to'    => $rep['date_max'],
+				'mtime' => $rep['uploaded_at'],
+				'sites' => is_array( $sites_decoded ) ? $sites_decoded : [],
+			];
+		}
+
+		$now     = current_time( 'mysql' );
+		$payload = [
+			'generated_at'         => mysql_to_rfc3339( $now ),
+			'generated_at_display' => $now,
+			'timezone'             => 'America/Chicago',
+			'reports'              => $reports,
+			'rows'                 => $rows,
+			'sites'                => $site_order,
+			'beacon_map'           => $beacon_map,
+			'weeks'                => $weeks,
+		];
+
+		$resp = new WP_REST_Response( $payload, 200 );
+		$resp->header( 'ETag', $etag );
+		$resp->header( 'Cache-Control', 'private, must-revalidate' );
+		return $resp;
+	}
+
+	/**
+	 * Convert a "YYYY-MM-DD HH:MM:SS" UTC MySQL datetime to ISO 8601 with Z suffix.
+	 *
+	 * @param string $mysql_dt MySQL datetime string in UTC.
+	 *
+	 * @return string ISO 8601 with `Z` suffix.
+	 */
+	private static function utc_datetime_to_iso( string $mysql_dt ): string {
+		return str_replace( ' ', 'T', $mysql_dt ) . 'Z';
 	}
 }
