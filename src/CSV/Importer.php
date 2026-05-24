@@ -95,14 +95,15 @@ final class Importer {
 		}
 
 		// Skip re-uploads of the exact same file.
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$existing_id = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				'SELECT id FROM ' . Schema::table_reports() . ' WHERE file_hash = %s',
+				'SELECT id FROM %i WHERE file_hash = %s',
+				Schema::table_reports(),
 				$hash
 			)
 		);
-		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		if ( $existing_id ) {
 			return [
 				'report_id'      => $existing_id,
@@ -311,14 +312,14 @@ final class Importer {
 			}
 		}
 
-		// $t_int is a controlled table name. $cols is a class constant. $values
-		// holds only %s placeholders. The actual user/CSV data is in $flat and
-		// is bound via $wpdb->prepare() below — phpcs can't follow the indirection.
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$sql      = "INSERT IGNORE INTO {$t_int} (" . implode( ',', $cols ) . ') VALUES ' . implode( ',', $values );
-		$prepared = $wpdb->prepare( $sql, $flat );
+		// $cols is a class constant. $values holds only %s placeholders. The
+		// actual user/CSV data is in $flat and is bound via $wpdb->prepare()
+		// below — phpcs can't follow the indirection.
+		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$sql      = 'INSERT IGNORE INTO %i (' . implode( ',', $cols ) . ') VALUES ' . implode( ',', $values );
+		$prepared = $wpdb->prepare( $sql, array_merge( [ $t_int ], $flat ) );
 		$wpdb->query( $prepared );
-		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$kept  = (int) $wpdb->rows_affected;
 		$dupes = count( $rows ) - $kept;
@@ -341,15 +342,18 @@ final class Importer {
 				$keys_args[] = $r['occurred_at'];
 			}
 
-			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// Placeholder count is dynamic — built from $keys_sql which is a
+			// list of '(%s, %s)' fragments paralleling $keys_args. phpcs can't
+			// statically count placeholders constructed via implode().
+			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$lookup = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT id, session_id, occurred_at FROM {$t_int} WHERE (session_id, occurred_at) IN (" . implode( ',', $keys_sql ) . ') AND report_id = %d',
-					array_merge( $keys_args, [ $rows[0]['report_id'] ] )
+					'SELECT id, session_id, occurred_at FROM %i WHERE (session_id, occurred_at) IN (' . implode( ',', $keys_sql ) . ') AND report_id = %d',
+					array_merge( [ $t_int ], $keys_args, [ $rows[0]['report_id'] ] )
 				),
 				ARRAY_A
 			);
-			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 			$art_values = [];
 			$art_flat   = [];
@@ -365,10 +369,10 @@ final class Importer {
 				}
 			}
 			if ( $art_values ) {
-				// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-				$art_sql = "INSERT INTO {$t_art} (interaction_id, position, title, url) VALUES " . implode( ',', $art_values );
-				$wpdb->query( $wpdb->prepare( $art_sql, $art_flat ) );
-				// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$art_sql = 'INSERT INTO %i (interaction_id, position, title, url) VALUES ' . implode( ',', $art_values );
+				$wpdb->query( $wpdb->prepare( $art_sql, array_merge( [ $t_art ], $art_flat ) ) );
+				// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			}
 		}
 

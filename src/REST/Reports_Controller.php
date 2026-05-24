@@ -131,9 +131,8 @@ final class Reports_Controller extends WP_REST_Controller {
 		$per_page       = is_scalar( $per_page_param ) ? (int) $per_page_param : 25;
 		$per_page       = max( 1, min( 200, $per_page ) );
 
-		// Table name from Schema; no user input.
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-		$total       = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_rep}" );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$total       = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $t_rep ) );
 		$total_pages = (int) max( 1, (int) ceil( $total / $per_page ) );
 		// Server-side clamp: if the client asks past the last page (e.g. after
 		// a delete), give them the last page rather than an empty body.
@@ -142,15 +141,16 @@ final class Reports_Controller extends WP_REST_Controller {
 
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT id, filename, uploaded_at, uploaded_by, row_count, dupes_skipped, date_min, date_max, sites_json, notes
-				 FROM {$t_rep} ORDER BY uploaded_at DESC
-				 LIMIT %d OFFSET %d",
+				'SELECT id, filename, uploaded_at, uploaded_by, row_count, dupes_skipped, date_min, date_max, sites_json, notes
+				 FROM %i ORDER BY uploaded_at DESC
+				 LIMIT %d OFFSET %d',
+				$t_rep,
 				$per_page,
 				$offset
 			),
 			ARRAY_A
 		);
-		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		foreach ( $rows as &$r ) {
 			$r['id']            = (int) $r['id'];
@@ -231,11 +231,10 @@ final class Reports_Controller extends WP_REST_Controller {
 		$t_art = Schema::table_article_refs();
 
 		// Cascade: article_refs -> interactions -> report.
-		// Table names are controlled by Schema; $report_id is properly placeholdered.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-		$wpdb->query( $wpdb->prepare( "DELETE a FROM {$t_art} a JOIN {$t_int} i ON a.interaction_id = i.id WHERE i.report_id = %d", $report_id ) );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-		$wpdb->query( $wpdb->prepare( 'DELETE FROM ' . $t_int . ' WHERE report_id = %d', $report_id ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( $wpdb->prepare( 'DELETE a FROM %i a JOIN %i i ON a.interaction_id = i.id WHERE i.report_id = %d', $t_art, $t_int, $report_id ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE report_id = %d', $t_int, $report_id ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->delete( Schema::table_reports(), [ 'id' => $report_id ], [ '%d' ] );
 
@@ -269,16 +268,15 @@ final class Reports_Controller extends WP_REST_Controller {
 		// added/removed (id+count), when a report is uploaded/deleted, or
 		// when the Beacon map changes. Costs three indexed scalar queries.
 		// Browsers send `If-None-Match: <etag>` and we 304 on a match.
-		// Table names from Schema::table_*(); no user input.
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$fp_parts = [
-			(int) $wpdb->get_var( "SELECT COALESCE(MAX(id), 0) FROM {$t_int}" ),
-			(int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_int}" ),
-			(string) $wpdb->get_var( "SELECT COALESCE(MAX(uploaded_at), '') FROM {$t_rep}" ),
-			(int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_rep}" ),
+			(int) $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE(MAX(id), 0) FROM %i', $t_int ) ),
+			(int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $t_int ) ),
+			(string) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(MAX(uploaded_at), '') FROM %i", $t_rep ) ),
+			(int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $t_rep ) ),
 			md5( (string) wp_json_encode( $beacon_map ) ),
 		];
-		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$etag = '"' . substr( md5( implode( '|', $fp_parts ) ), 0, 16 ) . '"';
 
 		// Apache's mod_deflate (and some CDNs) append `-gzip` / `-br` to ETags
@@ -302,24 +300,29 @@ final class Reports_Controller extends WP_REST_Controller {
 		// Single SELECT for all interactions. occurred_at is stored in UTC;
 		// re-emit as ISO with `Z` suffix so the frontend's existing toCentral()
 		// helper handles it identically to the old payload.
-		// Table names from Schema::table_*(); no user input.
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$rows_raw = $wpdb->get_results(
-			"SELECT id, session_id, occurred_at, week_ending, beacon_id, site,
-			        question, answer, answer_type, customer_id,
-			        session_resolution, session_end_reason, rating, comment,
-			        conversation_url, report_id
-			 FROM {$t_int}
-			 ORDER BY occurred_at DESC",
+			$wpdb->prepare(
+				'SELECT id, session_id, occurred_at, week_ending, beacon_id, site,
+				        question, answer, answer_type, customer_id,
+				        session_resolution, session_end_reason, rating, comment,
+				        conversation_url, report_id
+				 FROM %i
+				 ORDER BY occurred_at DESC',
+				$t_int
+			),
 			ARRAY_A
 		);
 
 		// Pull article refs in one query, group by interaction id.
 		$arts_raw = $wpdb->get_results(
-			"SELECT interaction_id, position, title, url FROM {$t_art} ORDER BY interaction_id, position",
+			$wpdb->prepare(
+				'SELECT interaction_id, position, title, url FROM %i ORDER BY interaction_id, position',
+				$t_art
+			),
 			ARRAY_A
 		);
-		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$arts_by_id = [];
 		foreach ( (array) $arts_raw as $a ) {
@@ -359,15 +362,18 @@ final class Reports_Controller extends WP_REST_Controller {
 		$weeks = array_keys( $weeks );
 		sort( $weeks );
 
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$reports_raw = $wpdb->get_results(
-			"SELECT id, filename, uploaded_at, row_count, dupes_skipped,
-			        date_min, date_max, sites_json
-			 FROM {$t_rep}
-			 ORDER BY uploaded_at ASC",
+			$wpdb->prepare(
+				'SELECT id, filename, uploaded_at, row_count, dupes_skipped,
+				        date_min, date_max, sites_json
+				 FROM %i
+				 ORDER BY uploaded_at ASC',
+				$t_rep
+			),
 			ARRAY_A
 		);
-		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$reports = [];
 		foreach ( (array) $reports_raw as $rep ) {
