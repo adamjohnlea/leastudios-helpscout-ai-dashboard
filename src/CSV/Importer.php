@@ -316,9 +316,8 @@ final class Importer {
 		// actual user/CSV data is in $flat and is bound via $wpdb->prepare()
 		// below — phpcs can't follow the indirection.
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$sql      = 'INSERT IGNORE INTO %i (' . implode( ',', $cols ) . ') VALUES ' . implode( ',', $values );
-		$prepared = $wpdb->prepare( $sql, array_merge( [ $t_int ], $flat ) );
-		$wpdb->query( $prepared );
+		$sql = 'INSERT IGNORE INTO %i (' . implode( ',', $cols ) . ') VALUES ' . implode( ',', $values );
+		$wpdb->query( $wpdb->prepare( $sql, array_merge( [ $t_int ], $flat ) ) );
 		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
 		$kept  = (int) $wpdb->rows_affected;
@@ -334,21 +333,19 @@ final class Importer {
 				$arts_by_key[ $key ] = $article_lists[ $i ] ?? [];
 			}
 
-			$keys_sql  = [];
 			$keys_args = [];
 			foreach ( $rows as $r ) {
-				$keys_sql[]  = '(%s, %s)';
 				$keys_args[] = $r['session_id'];
 				$keys_args[] = $r['occurred_at'];
 			}
 
-			// Placeholder count is dynamic — built from $keys_sql which is a
-			// list of '(%s, %s)' fragments paralleling $keys_args. phpcs can't
-			// statically count placeholders constructed via implode().
+			// Placeholder count is dynamic — built from a fixed '(%s, %s)'
+			// fragment repeated to parallel $keys_args. phpcs can't statically
+			// count placeholders constructed via str_repeat().
 			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 			$lookup = $wpdb->get_results(
 				$wpdb->prepare(
-					'SELECT id, session_id, occurred_at FROM %i WHERE (session_id, occurred_at) IN (' . implode( ',', $keys_sql ) . ') AND report_id = %d',
+					'SELECT id, session_id, occurred_at FROM %i WHERE (session_id, occurred_at) IN (' . rtrim( str_repeat( '(%s, %s),', count( $rows ) ), ',' ) . ') AND report_id = %d',
 					array_merge( [ $t_int ], $keys_args, [ $rows[0]['report_id'] ] )
 				),
 				ARRAY_A

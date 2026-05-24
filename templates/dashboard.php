@@ -378,13 +378,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 // Menu slugs are defined as private constants on Admin/Admin.php; reproduce
 // them here verbatim so the template stays self-contained (it's `require`d
 // from Admin::render_dashboard_page() in an admin context).
-$reports_url  = admin_url( 'admin.php?page=leastudios-helpscout-ai-dashboard-reports' );
-$settings_url = admin_url( 'admin.php?page=leastudios-helpscout-ai-dashboard-settings' );
+$leastudios_helpscout_ai_dashboard_reports_url  = admin_url( 'admin.php?page=leastudios-helpscout-ai-dashboard-reports' );
+$leastudios_helpscout_ai_dashboard_settings_url = admin_url( 'admin.php?page=leastudios-helpscout-ai-dashboard-settings' );
 ?>
 <div class="wrap aiad-page">
 	<h1 class="wp-heading-inline">AI Answers</h1>
-	<a href="<?php echo esc_url( $reports_url ); ?>" class="page-title-action">Reports</a>
-	<a href="<?php echo esc_url( $settings_url ); ?>" class="page-title-action">Settings</a>
+	<a href="<?php echo esc_url( $leastudios_helpscout_ai_dashboard_reports_url ); ?>" class="page-title-action">Reports</a>
+	<a href="<?php echo esc_url( $leastudios_helpscout_ai_dashboard_settings_url ); ?>" class="page-title-action">Settings</a>
 	<hr class="wp-header-end">
 
 	<p class="aiad-page-meta">
@@ -407,7 +407,7 @@ $settings_url = admin_url( 'admin.php?page=leastudios-helpscout-ai-dashboard-set
 
 	<div class="aiad-session-banner">
 		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-		<span><strong>Upload reports:</strong> Help Scout AI Beacon CSVs are imported on the <a href="<?php echo esc_url( $reports_url ); ?>">Reports page</a>.</span>
+		<span><strong>Upload reports:</strong> Help Scout AI Beacon CSVs are imported on the <a href="<?php echo esc_url( $leastudios_helpscout_ai_dashboard_reports_url ); ?>">Reports page</a>.</span>
 	</div>
 
 	<div id="view-overview">
