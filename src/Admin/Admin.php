@@ -149,11 +149,12 @@ final class Admin {
 				LEASTUDIOS_HELPSCOUT_AI_DASHBOARD_VERSION
 			);
 
-			// Charts are drawn via the global `Chart` from Chart.js. Loaded from
-			// the same CDN as the source plugin for behaviour parity.
+			// Charts are drawn via the global `Chart` from Chart.js. Bundled
+			// locally rather than CDN-loaded — WordPress.org plugin guidelines
+			// forbid offloading scripts to remote services.
 			wp_enqueue_script(
 				'lshsaid-chartjs',
-				'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
+				LEASTUDIOS_HELPSCOUT_AI_DASHBOARD_URL . 'assets/vendor/chart.umd.min.js',
 				[],
 				'4.4.1',
 				true

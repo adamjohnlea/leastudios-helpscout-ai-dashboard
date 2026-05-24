@@ -1,6 +1,8 @@
 # Dependencies
-vendor/
+/vendor/
 node_modules/
+# but: bundled third-party JS shipped with the plugin (e.g. assets/vendor/chart.umd.min.js)
+# must be tracked, so the root-only anchoring above is intentional.
 
 # OS
 .DS_Store
