@@ -54,6 +54,11 @@ final class Reports_Controller extends WP_REST_Controller {
 			'/' . $this->rest_base,
 			[
 				[
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'list_reports' ],
+					'permission_callback' => [ $this, 'check_view_cap' ],
+				],
+				[
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => [ $this, 'upload_report' ],
 					'permission_callback' => [ $this, 'check_manage_cap' ],
@@ -107,6 +112,67 @@ final class Reports_Controller extends WP_REST_Controller {
 	 */
 	public function check_view_cap(): bool {
 		return current_user_can( Capabilities::VIEW );
+	}
+
+	/**
+	 * Handle GET /reports — paginated list of uploaded reports for the Reports admin page.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function list_reports( WP_REST_Request $request ): WP_REST_Response {
+		global $wpdb;
+		$t_rep = Schema::table_reports();
+
+		$page_param     = $request->get_param( 'page' );
+		$per_page_param = $request->get_param( 'per_page' );
+		$page           = is_scalar( $page_param ) ? max( 1, (int) $page_param ) : 1;
+		$per_page       = is_scalar( $per_page_param ) ? (int) $per_page_param : 25;
+		$per_page       = max( 1, min( 200, $per_page ) );
+
+		// Table name from Schema; no user input.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$total       = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$t_rep}" );
+		$total_pages = (int) max( 1, (int) ceil( $total / $per_page ) );
+		// Server-side clamp: if the client asks past the last page (e.g. after
+		// a delete), give them the last page rather than an empty body.
+		$page   = min( $page, $total_pages );
+		$offset = ( $page - 1 ) * $per_page;
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, filename, uploaded_at, uploaded_by, row_count, dupes_skipped, date_min, date_max, sites_json, notes
+				 FROM {$t_rep} ORDER BY uploaded_at DESC
+				 LIMIT %d OFFSET %d",
+				$per_page,
+				$offset
+			),
+			ARRAY_A
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+
+		foreach ( $rows as &$r ) {
+			$r['id']            = (int) $r['id'];
+			$r['row_count']     = (int) $r['row_count'];
+			$r['dupes_skipped'] = (int) $r['dupes_skipped'];
+			$r['uploaded_by']   = (int) $r['uploaded_by'];
+			$sites_decoded      = json_decode( (string) $r['sites_json'], true );
+			$r['sites']         = is_array( $sites_decoded ) ? $sites_decoded : [];
+			unset( $r['sites_json'] );
+		}
+		unset( $r );
+
+		return new WP_REST_Response(
+			[
+				'rows'        => $rows,
+				'total'       => $total,
+				'page'        => $page,
+				'per_page'    => $per_page,
+				'total_pages' => $total_pages,
+			],
+			200
+		);
 	}
 
 	/**

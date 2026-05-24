@@ -99,4 +99,55 @@ final class ReportsControllerTest extends TestCase {
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 		@unlink( $tmp );
 	}
+
+	public function test_list_reports_returns_uploaded_rows(): void {
+		$admin = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin );
+
+		// Seed one upload so there's something to list.
+		$tmp = tempnam( sys_get_temp_dir(), 'lshsaid' );
+		copy( __DIR__ . '/../Fixtures/csv/happy.csv', $tmp );
+		$upload_request = new WP_REST_Request( 'POST', '/' . Reports_Controller::REST_NAMESPACE . '/reports' );
+		$upload_request->set_file_params(
+			[
+				'file' => [
+					'name'     => 'happy.csv',
+					'tmp_name' => $tmp,
+					'error'    => UPLOAD_ERR_OK,
+					'size'     => filesize( $tmp ),
+				],
+			]
+		);
+		$this->controller->upload_report( $upload_request );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+		@unlink( $tmp );
+
+		$list_request = new WP_REST_Request( 'GET', '/' . Reports_Controller::REST_NAMESPACE . '/reports' );
+		$list_request->set_query_params(
+			[
+				'page'     => 1,
+				'per_page' => 25,
+			]
+		);
+		$response = $this->controller->list_reports( $list_request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 1, $data['total'] );
+		$this->assertSame( 1, $data['page'] );
+		$this->assertSame( 25, $data['per_page'] );
+		$this->assertSame( 1, $data['total_pages'] );
+		$this->assertCount( 1, $data['rows'] );
+
+		$row = $data['rows'][0];
+		$this->assertSame( 'happy.csv', $row['filename'] );
+		$this->assertSame( 5, $row['row_count'] );
+		$this->assertIsArray( $row['sites'] );
+		$this->assertArrayNotHasKey( 'sites_json', $row, 'sites_json should be decoded into the sites key, not exposed raw' );
+	}
+
+	public function test_anonymous_user_cannot_view_reports(): void {
+		wp_set_current_user( 0 );
+		$this->assertFalse( $this->controller->check_view_cap() );
+	}
 }
