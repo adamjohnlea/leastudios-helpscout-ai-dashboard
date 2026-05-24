@@ -267,10 +267,21 @@ final class Importer {
 	}
 
 	/**
-	 * Insert a chunk of pending rows + their article refs. Uses INSERT IGNORE
-	 * to silently skip rows that collide on (session_id, occurred_at). After
-	 * the bulk insert we re-query the just-inserted rows to map back to ids
-	 * for article ref insertion.
+	 * Insert a chunk of pending rows + their article refs.
+	 *
+	 * Each interaction is inserted with a single-row `INSERT IGNORE` whose
+	 * format string is a complete static literal — Plugin Check and WPCS can
+	 * statically verify every placeholder. INSERT IGNORE preserves the
+	 * previous semantics for both duplicate-key collisions on
+	 * `(session_id, occurred_at)` and MySQL's default truncation behaviour
+	 * for over-long values (which `$wpdb->insert()` would reject outright
+	 * via its pre-flight charset/length check). `$wpdb->insert_id` is read
+	 * directly after a successful insert, so the per-chunk SELECT lookup
+	 * the previous bulk version needed is gone.
+	 *
+	 * Trade-off vs. the previous bulk INSERT IGNORE: more individual queries
+	 * (one per row + one per article) instead of a single multi-row insert,
+	 * but the CSV importer is an admin/CLI operation, not a hot path.
 	 *
 	 * @param list<array<string, scalar>>                               $rows          Interactions ready to insert; keys match the column list below.
 	 * @param list<list<array{position:int, title:string, url:string}>> $article_lists Per-row article refs, parallel-indexed to $rows.
@@ -282,94 +293,65 @@ final class Importer {
 		$t_int = Schema::table_interactions();
 		$t_art = Schema::table_article_refs();
 
-		$cols = [
-			'session_id',
-			'occurred_at',
-			'week_ending',
-			'beacon_id',
-			'beacon_device_id',
-			'site',
-			'question',
-			'answer',
-			'answer_type',
-			'customer_id',
-			'session_resolution',
-			'session_end_reason',
-			'rating',
-			'comment',
-			'conversation_id',
-			'conversation_url',
-			'report_id',
-		];
+		$kept  = 0;
+		$dupes = 0;
 
-		$placeholders = '(' . implode( ',', array_fill( 0, count( $cols ), '%s' ) ) . ')';
-		$values       = [];
-		$flat         = [];
-		foreach ( $rows as $r ) {
-			$values[] = $placeholders;
-			foreach ( $cols as $c ) {
-				$flat[] = (string) $r[ $c ];
-			}
-		}
-
-		// $cols is a class constant. $values holds only %s placeholders. The
-		// actual user/CSV data is in $flat and is bound via $wpdb->prepare()
-		// below — phpcs can't follow the indirection.
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$sql = 'INSERT IGNORE INTO %i (' . implode( ',', $cols ) . ') VALUES ' . implode( ',', $values );
-		$wpdb->query( $wpdb->prepare( $sql, array_merge( [ $t_int ], $flat ) ) );
-		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-
-		$kept  = (int) $wpdb->rows_affected;
-		$dupes = count( $rows ) - $kept;
-
-		// Re-fetch ids for the (session_id, occurred_at) pairs we inserted (or
-		// matched). Article inserts are best-effort: only attached when a row
-		// was actually inserted, to avoid duplicating articles on dupe rows.
-		if ( $kept > 0 ) {
-			$arts_by_key = [];
-			foreach ( $rows as $i => $r ) {
-				$key                 = $r['session_id'] . '|' . $r['occurred_at'];
-				$arts_by_key[ $key ] = $article_lists[ $i ] ?? [];
-			}
-
-			$keys_args = [];
-			foreach ( $rows as $r ) {
-				$keys_args[] = $r['session_id'];
-				$keys_args[] = $r['occurred_at'];
-			}
-
-			// Placeholder count is dynamic — built from a fixed '(%s, %s)'
-			// fragment repeated to parallel $keys_args. phpcs can't statically
-			// count placeholders constructed via str_repeat().
-			// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$lookup = $wpdb->get_results(
+		foreach ( $rows as $i => $r ) {
+			// Single-row INSERT IGNORE with a fully static format string.
+			// `%i` identifies the table, the 16 `%s` placeholders cover the
+			// VARCHAR/TEXT columns, and `%d` covers report_id. INSERT IGNORE
+			// preserves the previous behaviour of (a) silently skipping
+			// duplicate-key collisions on (session_id, occurred_at) and (b)
+			// letting MySQL truncate values that exceed column widths instead
+			// of refusing the row outright (which `$wpdb->insert()` would).
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$inserted = $wpdb->query(
 				$wpdb->prepare(
-					'SELECT id, session_id, occurred_at FROM %i WHERE (session_id, occurred_at) IN (' . rtrim( str_repeat( '(%s, %s),', count( $rows ) ), ',' ) . ') AND report_id = %d',
-					array_merge( [ $t_int ], $keys_args, [ $rows[0]['report_id'] ] )
-				),
-				ARRAY_A
+					'INSERT IGNORE INTO %i (session_id, occurred_at, week_ending, beacon_id, beacon_device_id, site, question, answer, answer_type, customer_id, session_resolution, session_end_reason, rating, comment, conversation_id, conversation_url, report_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %d)',
+					$t_int,
+					(string) $r['session_id'],
+					(string) $r['occurred_at'],
+					(string) $r['week_ending'],
+					(string) $r['beacon_id'],
+					(string) $r['beacon_device_id'],
+					(string) $r['site'],
+					(string) $r['question'],
+					(string) $r['answer'],
+					(string) $r['answer_type'],
+					(string) $r['customer_id'],
+					(string) $r['session_resolution'],
+					(string) $r['session_end_reason'],
+					(string) $r['rating'],
+					(string) $r['comment'],
+					(string) $r['conversation_id'],
+					(string) $r['conversation_url'],
+					(int) $r['report_id']
+				)
 			);
-			// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
-			$art_values = [];
-			$art_flat   = [];
-			foreach ( (array) $lookup as $hit ) {
-				$key  = $hit['session_id'] . '|' . $hit['occurred_at'];
-				$arts = $arts_by_key[ $key ] ?? [];
-				foreach ( $arts as $a ) {
-					$art_values[] = '(%d, %d, %s, %s)';
-					$art_flat[]   = (int) $hit['id'];
-					$art_flat[]   = (int) $a['position'];
-					$art_flat[]   = (string) $a['title'];
-					$art_flat[]   = (string) $a['url'];
-				}
+			if ( false === $inserted || 0 === $inserted ) {
+				++$dupes;
+				continue;
 			}
-			if ( $art_values ) {
-				// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-				$art_sql = 'INSERT INTO %i (interaction_id, position, title, url) VALUES ' . implode( ',', $art_values );
-				$wpdb->query( $wpdb->prepare( $art_sql, array_merge( [ $t_art ], $art_flat ) ) );
-				// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+
+			++$kept;
+			$interaction_id = (int) $wpdb->insert_id;
+
+			$arts = $article_lists[ $i ] ?? [];
+			foreach ( $arts as $a ) {
+				// Single-row INSERT for the article ref — static format
+				// string, all values bound through `prepare()`.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->query(
+					$wpdb->prepare(
+						'INSERT INTO %i (interaction_id, position, title, url) VALUES (%d, %d, %s, %s)',
+						$t_art,
+						$interaction_id,
+						(int) $a['position'],
+						(string) $a['title'],
+						(string) $a['url']
+					)
+				);
 			}
 		}
 
