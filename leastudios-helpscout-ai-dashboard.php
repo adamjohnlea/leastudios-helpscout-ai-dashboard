@@ -3,7 +3,7 @@
  * Plugin Name:       leaStudios Help Scout AI Dashboard
  * Plugin URI:        https://leastudios.com/plugins/leastudios-helpscout-ai-dashboard
  * Description:       Imports Help Scout AI Beacon CSV exports and renders a weekly dashboard of customer interactions across Beacons.
- * Version:           1.0.1
+ * Version:           1.0.2
  * Requires at least: 6.4
  * Requires PHP:      8.2
  * Author:            leaStudios
