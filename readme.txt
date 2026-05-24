@@ -4,7 +4,7 @@ Tags: helpscout, csv, dashboard, reporting
 Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 8.2
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -70,10 +70,30 @@ Deleting the plugin via the Plugins screen runs the uninstaller, which drops all
 
 == Changelog ==
 
+= 1.0.4 — 2026-05-24 =
+
+* Changed: hardened SQL construction across the plugin for Plugin Check compliance — `Importer::flush()` rewritten to use per-row inserts with fully-static prepare format strings (was bulk INSERT with `str_repeat()` placeholders). Table-name interpolations across the plugin converted to the `%i` placeholder (WordPress 6.2+). Unprefixed dashboard-template globals prefixed.
+* Internal: new `composer lint:db` tripwire (shared across the suite) blocks variable interpolation in `$wpdb` query construction; Plugin Check is now run against the release zip in CI to catch regressions before tag.
+* Docs: added developer handbook under `docs/developer-handbook.md`.
+
+= 1.0.3 =
+* Fix: derive `VERSION` constant from the plugin header so the runtime constant can never drift from the release-zip version.
+
+= 1.0.2 =
+* Fix: declare compatibility with WordPress 7.0.
+* Fix: bundle Chart.js locally to satisfy WordPress.org plugin guidelines.
+
+= 1.0.1 =
+* Fix: register `GET /reports` endpoint so the Reports page lists uploads.
+* Internal: tag-triggered release workflow with auto-generated notes.
+
 = 1.0.0 =
 * Initial public release. CSV ingestion with file-hash + per-row dedupe, three-table schema, Beacon → site Settings page, weekly per-site dashboard, and `wp lshsai import-file` / `wp lshsai import-folder` WP-CLI commands.
 
 == Upgrade Notice ==
+
+= 1.0.4 =
+Internal Plugin Check hardening — no breaking changes.
 
 = 1.0.0 =
 First public release.
