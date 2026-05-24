@@ -743,47 +743,96 @@ add_action( 'my_plugin_nightly_sync', function (): void {
 
 ## 9. Extension Recipes
 
-### How do I add a custom Beacon UUID → site mapping programmatically?
+### How do I add a custom Beacon UUID → site mapping and immediately import a CSV?
 
-**Goal:** Seed or update the Beacon map from code (e.g. during another plugin's
-activation) without going through the Settings admin page.
+**Goal:** Seed a new Beacon UUID → site-name mapping from code and then import a
+waiting CSV so the new entry resolves correctly from the very first run.
+
+**PHP API used:** `Schema::OPT_BEACON_MAP`, `Importer::import()`.
 
 **Walkthrough:** The Beacon map is a plain WordPress option keyed by
 `Schema::OPT_BEACON_MAP`. Read the current map, merge your entries, and write it
-back. The `Importer` reads this option at construction time, so any CSV import
-that runs after your update will resolve the new Beacon IDs correctly. The
-Settings admin page and the `POST /settings` REST endpoint both use the same
-option, so your programmatic change is immediately visible there too.
+back. The `Importer` reads this option at construction time, so construct it
+*after* updating the map and your new Beacon UUID will resolve immediately.
+Because `Importer::import()` dedupes on the file's SHA-1 hash, running the same
+import a second time is a no-op — making this pattern safe to call on every
+plugin activation.
+
+The Settings admin page and the `POST /settings` REST endpoint both read from the
+same option, so the new entry appears in the UI as soon as `update_option()`
+returns.
+
+**Complete example:**
 
 ```php
+use LEAStudios\HelpScoutAIDashboard\CSV\Importer;
 use LEAStudios\HelpScoutAIDashboard\Database\Schema;
 
-function my_plugin_seed_beacon_map(): void {
+function my_plugin_seed_and_import(): void {
+    // 1. Merge our Beacon UUID into the map without overwriting existing entries.
     $map = (array) get_option( Schema::OPT_BEACON_MAP, [] );
-
-    // Add our Beacon without overwriting existing entries.
     $map['a1b2c3d4-0000-0000-0000-000000000001'] = 'My New Site';
-
     update_option( Schema::OPT_BEACON_MAP, $map );
+
+    // 2. Import a waiting CSV now that the Beacon resolves correctly.
+    $csv_path = '/var/sync/helpscout/my-new-site-initial.csv';
+
+    if ( ! is_readable( $csv_path ) ) {
+        error_log( '[my-plugin] Initial CSV not readable: ' . $csv_path );
+        return;
+    }
+
+    try {
+        $result = ( new Importer() )->import(
+            $csv_path,
+            basename( $csv_path ),
+            0,
+            'activation-seed'
+        );
+    } catch ( \RuntimeException $e ) {
+        error_log( '[my-plugin] Initial import failed: ' . $e->getMessage() );
+        return;
+    }
+
+    if ( isset( $result['skipped_reason'] ) ) {
+        return; // Already imported on a previous activation — fine.
+    }
+
+    error_log( sprintf(
+        '[my-plugin] Seeded beacon map and imported %d rows (%d dupes skipped).',
+        $result['rows'],
+        $result['dupes']
+    ) );
 }
-register_activation_hook( __FILE__, 'my_plugin_seed_beacon_map' );
+register_activation_hook( __FILE__, 'my_plugin_seed_and_import' );
 ```
 
 ---
 
 ### How do I trigger a CSV import from a scheduled WP-Cron event?
 
-**Goal:** Automatically import a fresh Help Scout CSV that a remote sync drops
-into a known folder, running on a daily WP-Cron schedule.
+**Goal:** Automatically import fresh Help Scout CSVs that a remote sync drops
+into a known folder, running on a daily WP-Cron schedule, and skip the run
+entirely when the Beacon map is not yet configured.
+
+**PHP API used:** `Schema::OPT_BEACON_MAP`, `Importer::import()`.
 
 **Walkthrough:** Register a cron event that calls `Importer::import()` directly.
+Check `Schema::OPT_BEACON_MAP` at the top of the handler: if the map is empty
+there is no point importing because every row will be stored as
+`"Unknown (<uuid>)"` rather than a friendly site name. This guard also prevents
+the cron from running before a site administrator has completed initial setup.
+
 Because the Importer dedupes on the file's SHA-1 hash, re-importing the same
 file multiple times is safe — subsequent calls return `skipped_reason:
-duplicate-upload` and write nothing. Use `glob()` to pick up the latest file,
-or manage filenames with date stamps so each day's file is distinct.
+duplicate-upload` and write nothing. Use date-stamped filenames so each day's
+file is distinct, or let the hash dedupe handle accidental re-drops.
+
+**Complete example:**
 
 ```php
 use LEAStudios\HelpScoutAIDashboard\CSV\Importer;
+use LEAStudios\HelpScoutAIDashboard\Database\Schema;
 
 add_action( 'plugins_loaded', function (): void {
     if ( ! wp_next_scheduled( 'my_plugin_helpscout_sync' ) ) {
@@ -792,6 +841,14 @@ add_action( 'plugins_loaded', function (): void {
 } );
 
 add_action( 'my_plugin_helpscout_sync', function (): void {
+    // Abort if no Beacon map has been configured — imports would produce
+    // "Unknown (<uuid>)" site names and pollute the dashboard.
+    $beacon_map = (array) get_option( Schema::OPT_BEACON_MAP, [] );
+    if ( ! $beacon_map ) {
+        error_log( '[my-plugin] Help Scout sync skipped: Beacon map is empty.' );
+        return;
+    }
+
     $folder = '/var/sync/helpscout';
     $files  = glob( $folder . '/ai_interactions*.csv' );
 
@@ -826,52 +883,106 @@ add_action( 'my_plugin_helpscout_sync', function (): void {
 
 ---
 
-### How do I query the dashboard data from PHP without going through REST?
+### How do I query interaction rows and their article refs from PHP?
 
-**Goal:** Read interaction rows or weekly aggregates directly from the database
-for a custom report or external integration.
+**Goal:** Read interaction rows together with the articles the AI surfaced, for a
+custom report or external integration, without going through the REST API.
+
+**PHP API used:** `Schema::table_interactions()`, `Schema::table_article_refs()`.
 
 **Walkthrough:** Use the `Schema::table_*()` accessors to get fully-prefixed
 table names, then query with `$wpdb->prepare()`. All `occurred_at` timestamps
 are stored in UTC; convert to the display timezone using WordPress's
-`get_date_from_gmt()`. The Beacon map is in the `Schema::OPT_BEACON_MAP` option.
+`get_date_from_gmt()` when presenting values to users.
+
+Join `article_refs` on `interaction_id` to pull the knowledge-base articles the
+AI surfaced alongside each answer. Because up to three refs per interaction are
+stored as separate rows (position 1–3), group them with `GROUP_CONCAT` or collect
+them in a second query. The example below uses a single JOIN and groups in PHP
+for simplicity.
+
+**Complete example:**
 
 ```php
 use LEAStudios\HelpScoutAIDashboard\Database\Schema;
 
-function my_plugin_get_weekly_totals( string $week_ending ): array {
+/**
+ * Return interactions for a given week, each with its article refs attached.
+ *
+ * @param string $week_ending ISO-week Thursday date, e.g. "2026-04-17".
+ * @return array<int, array{site: string, question: string, rating: string, articles: list<array{title: string, url: string}>}>
+ */
+function my_plugin_get_interactions_with_refs( string $week_ending ): array {
     global $wpdb;
 
     $t_int = Schema::table_interactions();
+    $t_art = Schema::table_article_refs();
 
-    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     $rows = $wpdb->get_results(
         $wpdb->prepare(
-            "SELECT site, COUNT(*) AS total,
-                    SUM( CASE WHEN rating = 'thumbs_up' THEN 1 ELSE 0 END ) AS thumbs_up
-             FROM {$t_int}
-             WHERE week_ending = %s
-             GROUP BY site
-             ORDER BY total DESC",
+            "SELECT i.id, i.site, i.question, i.rating,
+                    a.position, a.title AS art_title, a.url AS art_url
+             FROM {$t_int} AS i
+             LEFT JOIN {$t_art} AS a ON a.interaction_id = i.id
+             WHERE i.week_ending = %s
+             ORDER BY i.id ASC, a.position ASC",
             $week_ending
         ),
         ARRAY_A
     );
 
-    return is_array( $rows ) ? $rows : [];
+    if ( ! is_array( $rows ) ) {
+        return [];
+    }
+
+    // Group article refs back onto their parent interaction.
+    $interactions = [];
+    foreach ( $rows as $row ) {
+        $id = (int) $row['id'];
+        if ( ! isset( $interactions[ $id ] ) ) {
+            $interactions[ $id ] = [
+                'site'     => $row['site'],
+                'question' => $row['question'],
+                'rating'   => $row['rating'],
+                'articles' => [],
+            ];
+        }
+        if ( null !== $row['art_title'] ) {
+            $interactions[ $id ]['articles'][] = [
+                'title' => $row['art_title'],
+                'url'   => $row['art_url'],
+            ];
+        }
+    }
+
+    return array_values( $interactions );
 }
 ```
 
 ---
 
-### How do I grant the view capability to a custom role?
+### How do I grant the view capability to a custom role and verify REST access?
 
-**Goal:** Allow a custom WordPress role (e.g. `analyst`) to view the dashboard
-and reports without giving them the write (`manage_*`) capability.
+**Goal:** Allow a custom WordPress role (e.g. `analyst`) to read the dashboard
+and reports via the REST API, and confirm the capability assignment is working by
+calling `GET /reports` as that user.
 
-**Walkthrough:** Use `Capabilities::VIEW` from the plugin's constants file so
-your code stays in sync if the capability string ever changes. Grant the
-capability when your plugin activates and revoke it on uninstall.
+**REST + PHP API used:** `GET /reports`, `Capabilities::VIEW`, `Capabilities::MANAGE`.
+
+**Walkthrough:** Grant `Capabilities::VIEW` on activation using the constant from
+`src/Capabilities.php` so your code stays in sync if the capability string ever
+changes. Remove it on deactivation.
+
+To verify programmatically that a given user can reach the endpoint, dispatch a
+`WP_REST_Request` for `GET /reports` under that user's identity using
+`wp_set_current_user()` and `rest_get_server()->dispatch()`. This is most useful
+inside an integration test, but the same pattern works in a CLI helper command.
+Revoke the capability on deactivation; never rely on WordPress's built-in
+capability deletion when a plugin is removed — add an `uninstall.php` hook if
+you need permanent cleanup.
+
+**Complete example:**
 
 ```php
 use LEAStudios\HelpScoutAIDashboard\Capabilities;
@@ -892,57 +1003,118 @@ function my_plugin_revoke_analyst_caps(): void {
     }
 }
 register_deactivation_hook( __FILE__, 'my_plugin_revoke_analyst_caps' );
+
+/**
+ * Verify that a WP user can reach GET /reports via the REST API.
+ * Call this from a WP-CLI command or an integration test.
+ *
+ * @param int $user_id The WordPress user ID to test.
+ * @return bool True when the endpoint returns HTTP 200; false on 401/403.
+ */
+function my_plugin_verify_analyst_rest_access( int $user_id ): bool {
+    $prev = get_current_user_id();
+    wp_set_current_user( $user_id );
+
+    $request = new WP_REST_Request(
+        'GET',
+        '/leastudios-helpscout-ai-dashboard/v1/reports'
+    );
+    $request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+
+    $response = rest_get_server()->dispatch( $request );
+    $status   = $response->get_status();
+
+    wp_set_current_user( $prev );
+
+    return 200 === $status;
+}
 ```
 
 ---
 
-### How do I read the dashboard payload from another plugin via the REST API?
+### How do I fetch the dashboard and reports list from a remote site?
 
-**Goal:** Fetch the full dashboard JSON from a remote WordPress install running
-this plugin (e.g. to aggregate data across two sites into a third).
+**Goal:** Pull both the aggregated dashboard payload and the paginated reports
+list from a remote WordPress install running this plugin, so a third site can
+display a unified view across multiple Help Scout Beacon deployments.
+
+**REST routes used:** `GET /dashboard`, `GET /reports`.
 
 **Walkthrough:** Use an Application Password for authentication (WordPress 5.6+).
-Send the `If-None-Match` header with the ETag from your last successful fetch to
-avoid re-transferring unchanged data. The endpoint returns `304 Not Modified`
-with an empty body when nothing has changed — check for that before trying to
-decode JSON.
+Send the `If-None-Match` header with the ETag from your last successful dashboard
+fetch to avoid re-transferring unchanged data — the endpoint returns `304 Not
+Modified` with an empty body when nothing has changed.
+
+Fetch `GET /reports` separately to obtain import history metadata (filenames,
+date ranges, row counts). These two calls complement each other: the dashboard
+gives aggregated weekly data for charts; the reports list gives a per-file audit
+trail. Cache both responses independently because the reports list changes only
+when a new CSV is uploaded, while the dashboard fingerprint changes whenever
+interactions or the Beacon map are updated.
+
+**Complete example:**
 
 ```php
-function my_plugin_fetch_remote_dashboard( string $site_url, string $user, string $app_password ): ?array {
-    $endpoint = trailingslashit( $site_url )
-        . 'wp-json/leastudios-helpscout-ai-dashboard/v1/dashboard';
+/**
+ * Fetch the dashboard payload and reports list from a remote site.
+ *
+ * @param string $site_url      Base URL of the remote WordPress install.
+ * @param string $user          WordPress username with Application Password.
+ * @param string $app_password  Application Password (space-separated groups OK).
+ * @return array{dashboard: array<string, mixed>|null, reports: list<array<string, mixed>>}
+ */
+function my_plugin_fetch_remote_data( string $site_url, string $user, string $app_password ): array {
+    $base    = trailingslashit( $site_url ) . 'wp-json/leastudios-helpscout-ai-dashboard/v1/';
+    $auth    = [ 'Authorization' => 'Basic ' . base64_encode( $user . ':' . $app_password ) ];
+    $timeout = [ 'timeout' => 30 ];
 
+    // --- GET /dashboard (ETag-conditional) ---
     $cached_etag = get_transient( 'my_plugin_dashboard_etag' );
-    $headers     = [ 'Authorization' => 'Basic ' . base64_encode( $user . ':' . $app_password ) ];
+    $dash_headers = $auth;
     if ( $cached_etag ) {
-        $headers['If-None-Match'] = $cached_etag;
+        $dash_headers['If-None-Match'] = $cached_etag;
     }
 
-    $response = wp_remote_get( $endpoint, [ 'headers' => $headers, 'timeout' => 30 ] );
+    $dash_response = wp_remote_get( $base . 'dashboard', array_merge( $timeout, [ 'headers' => $dash_headers ] ) );
+    $dashboard     = null;
 
-    if ( is_wp_error( $response ) ) {
-        error_log( '[my-plugin] Dashboard fetch error: ' . $response->get_error_message() );
-        return null;
+    if ( ! is_wp_error( $dash_response ) ) {
+        $dash_code = wp_remote_retrieve_response_code( $dash_response );
+        if ( 200 === $dash_code ) {
+            $etag = wp_remote_retrieve_header( $dash_response, 'etag' );
+            if ( $etag ) {
+                set_transient( 'my_plugin_dashboard_etag', $etag, DAY_IN_SECONDS );
+            }
+            $decoded = json_decode( wp_remote_retrieve_body( $dash_response ), true );
+            $dashboard = is_array( $decoded ) ? $decoded : null;
+        } elseif ( 304 !== $dash_code ) {
+            error_log( '[my-plugin] GET /dashboard returned HTTP ' . $dash_code );
+        }
+        // 304 = unchanged; $dashboard stays null and the caller uses its cached copy.
+    } else {
+        error_log( '[my-plugin] GET /dashboard error: ' . $dash_response->get_error_message() );
     }
 
-    $code = wp_remote_retrieve_response_code( $response );
+    // --- GET /reports (first page) ---
+    $rep_response = wp_remote_get(
+        $base . 'reports?per_page=200',
+        array_merge( $timeout, [ 'headers' => $auth ] )
+    );
+    $reports = [];
 
-    if ( 304 === $code ) {
-        return null; // Data unchanged — use your cached copy.
+    if ( ! is_wp_error( $rep_response ) && 200 === wp_remote_retrieve_response_code( $rep_response ) ) {
+        $decoded = json_decode( wp_remote_retrieve_body( $rep_response ), true );
+        if ( is_array( $decoded ) && isset( $decoded['rows'] ) && is_array( $decoded['rows'] ) ) {
+            $reports = $decoded['rows'];
+        }
+    } else {
+        error_log( '[my-plugin] GET /reports error or non-200 response.' );
     }
 
-    if ( 200 !== $code ) {
-        error_log( '[my-plugin] Dashboard fetch returned HTTP ' . $code );
-        return null;
-    }
-
-    $etag = wp_remote_retrieve_header( $response, 'etag' );
-    if ( $etag ) {
-        set_transient( 'my_plugin_dashboard_etag', $etag, DAY_IN_SECONDS );
-    }
-
-    $body = json_decode( wp_remote_retrieve_body( $response ), true );
-    return is_array( $body ) ? $body : null;
+    return [
+        'dashboard' => $dashboard,
+        'reports'   => $reports,
+    ];
 }
 ```
 
@@ -953,6 +1125,8 @@ function my_plugin_fetch_remote_dashboard( string $site_url, string $user, strin
 **Goal:** Remove all interactions (and their article refs) associated with one
 site name, without deleting the entire reports those interactions came from.
 
+**PHP API used:** `Schema::table_interactions()`, `Schema::table_article_refs()`.
+
 **Walkthrough:** Query the `interactions` table filtered by `site`, collect the
 ids, delete the matching `article_refs` rows first (they reference interaction
 ids), then delete the interactions. Wrap both deletes in a transaction for
@@ -960,6 +1134,8 @@ atomicity if your MySQL configuration supports it. Note: this leaves the `report
 rows intact and may cause `row_count` to diverge from the actual interaction
 count — that is acceptable for an ad-hoc cleanup but you may want to update
 those columns afterwards.
+
+**Complete example:**
 
 ```php
 use LEAStudios\HelpScoutAIDashboard\Database\Schema;
