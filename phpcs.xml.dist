@@ -10,6 +10,10 @@
     <exclude-pattern>dist/*</exclude-pattern>
     <exclude-pattern>assets/js/*.js</exclude-pattern>
     <exclude-pattern>assets/css/*.css</exclude-pattern>
+    <!-- languages/index.php is the canonical WordPress directory-listing
+         stub ("Silence is golden.") — it intentionally has no file
+         docblock and needs no other scanning. -->
+    <exclude-pattern>languages/*</exclude-pattern>
 
     <config name="testVersion" value="8.2-"/>
     <config name="minimum_supported_wp_version" value="6.4"/>
