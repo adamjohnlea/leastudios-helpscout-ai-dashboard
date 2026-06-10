@@ -1000,7 +1000,154 @@ function renderWeekly() {
   renderWeeklyComments();
 }
 
-function renderTrends() { /* implemented in Task 2 */ }
+/* ==========================================================================
+   Trends tab
+   ========================================================================== */
+// One definition per KPI. pick() pulls the per-week value from a computeKpis
+// result; headline() formats the whole-range aggregate (so the big number on a
+// Trends card equals the Overview KPI card for the same site + range).
+const TREND_METRICS = [
+  {
+    key: "total", label: "Interactions", color: "#f5c26b",
+    pick: (k) => k.total, headline: (k) => fmt.int(k.total),
+    descriptor: (k) => `${fmt.int(k.sessions)} sessions`,
+    yPct: false, integer: true, lowerIsBetter: false, neutral: false,
+  },
+  {
+    key: "customers", label: "Identified customers", color: "#f5c26b",
+    pick: (k) => k.customers, headline: (k) => fmt.int(k.customers),
+    descriptor: (k) => k.customers ? `${(k.identifiedRows / k.customers).toFixed(1)} turns / cust` : "no Customer ID on imported rows",
+    yPct: false, integer: true, lowerIsBetter: false, neutral: false,
+  },
+  {
+    key: "resRate", label: "Resolution rate", color: "#9ec14a",
+    pick: (k) => k.resRate == null ? null : k.resRate * 100,
+    headline: (k) => fmt.pct(k.resRate),
+    descriptor: () => "customers helped",
+    yPct: true, integer: false, lowerIsBetter: false, neutral: false,
+  },
+  {
+    key: "escRate", label: "Escalation rate", color: "#f0b140",
+    pick: (k) => k.escRate == null ? null : k.escRate * 100,
+    headline: (k) => fmt.pct(k.escRate),
+    descriptor: () => "routed to humans · lower is better",
+    yPct: true, integer: false, lowerIsBetter: true, neutral: false,
+  },
+  {
+    key: "ratingScore", label: "Satisfaction score", color: "#f59a2f",
+    pick: (k) => k.ratingScore == null ? null : k.ratingScore * 100,
+    headline: (k) => k.ratingScore != null ? (k.ratingScore * 100).toFixed(0) + "%" : "—",
+    descriptor: (k) => `${fmt.int(k.rated)} ratings`,
+    yPct: true, integer: false, lowerIsBetter: false, neutral: false,
+  },
+  {
+    key: "avgTurns", label: "Avg turns / session", color: "#e57134",
+    pick: (k) => k.sessions ? k.total / k.sessions : null,
+    headline: (k) => k.sessions ? (k.total / k.sessions).toFixed(1) : "—",
+    descriptor: () => "incl. clarifications",
+    yPct: false, integer: false, lowerIsBetter: false, neutral: true,
+  },
+];
+
+function visibleTrendWeeks() {
+  const all = availableWeeks();              // ascending by date
+  const r = state.trends.range;
+  if (r === "all") return all;
+  const n = parseInt(r, 10);
+  return Number.isFinite(n) ? all.slice(-n) : all;
+}
+
+function trendDelta(points, m) {
+  const real = points.filter((v) => v != null);
+  if (real.length < 2) return `<span class="tr-d flat">—</span>`;
+  const first = real[0];
+  const last = real[real.length - 1];
+  const diff = last - first;
+  if (Math.abs(diff) < 1e-9) return `<span class="tr-d flat">flat</span>`;
+  const arrow = diff > 0 ? "▲" : "▼";
+  let mag;
+  if (m.yPct) mag = Math.abs(diff).toFixed(1) + "pt";
+  else if (m.neutral) mag = Math.abs(diff).toFixed(1);
+  else mag = first === 0 ? "∞" : Math.round((Math.abs(diff) / Math.abs(first)) * 100) + "%";
+  let cls;
+  if (m.neutral) cls = "flat";
+  else cls = ((m.lowerIsBetter ? -diff : diff) > 0) ? "up" : "down";
+  return `<span class="tr-d ${cls}">${arrow} ${mag}</span>`;
+}
+
+function trendChart(m, weeks, points) {
+  const chartKey = `trend-${m.key}`;
+  destroy(chartKey);
+  const yScale = m.yPct
+    ? { min: 0, max: 100, ticks: { callback: (v) => v + "%" }, grid: { color: "rgba(245,158,78,.06)" } }
+    : { beginAtZero: true, ticks: m.integer ? { precision: 0 } : {}, grid: { color: "rgba(245,158,78,.06)" } };
+  state.charts[chartKey] = new Chart(mkCanvas(`tr-c-${m.key}`), {
+    type: "line",
+    data: {
+      labels: weeks,
+      datasets: [{
+        label: m.label, data: points,
+        borderColor: m.color, backgroundColor: m.color + "22",
+        borderWidth: 2, tension: 0.3, fill: true, spanGaps: false,
+        pointRadius: weeks.length > 26 ? 0 : 2, pointHoverRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (c) => c.parsed.y == null ? "—" : (m.yPct ? c.parsed.y.toFixed(1) + "%" : fmt.int(c.parsed.y)) } },
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 14 } },
+        y: yScale,
+      },
+    },
+  });
+}
+
+function renderTrends() {
+  const weeks = visibleTrendWeeks();
+
+  // Reflect the active range on the segmented control.
+  document.querySelectorAll("#tr-range [data-range]").forEach((b) => {
+    b.classList.toggle("on", b.dataset.range === state.trends.range);
+  });
+
+  const ctx = document.getElementById("tr-context");
+  const grid = document.getElementById("tr-grid");
+
+  if (!weeks.length) {
+    ctx.textContent = "No weekly data";
+    grid.innerHTML = `<div class="empty">No weekly data for this site.</div>`;
+    TREND_METRICS.forEach((m) => destroy(`trend-${m.key}`));
+    return;
+  }
+
+  const siteLbl = state.site === "ALL" ? "All sites" : state.site;
+  ctx.textContent = `${weeks.length} week${weeks.length === 1 ? "" : "s"} · `
+    + `${formatWeekLabel(weeks[0])} – ${formatWeekLabel(weeks[weeks.length - 1])} · ${siteLbl}`;
+
+  // Per-week KPI snapshots (drives the lines + deltas) and the whole-range
+  // aggregate (drives the headline values — same maths as the Overview cards).
+  const weekKpis = weeks.map((w) => computeKpis(rowsForWeek(w)));
+  const weeksSet = new Set(weeks);
+  const rangeRows = weeklyScopeRows().filter((r) => r.week && weeksSet.has(r.week));
+  const agg = computeKpis(rangeRows);
+
+  grid.innerHTML = TREND_METRICS.map((m) => {
+    const points = weekKpis.map(m.pick);
+    return `
+      <div class="tr-card">
+        <div class="l">${esc(m.label)}</div>
+        <div class="tr-row"><span class="v">${esc(m.headline(agg))}</span>${trendDelta(points, m)}</div>
+        <div class="tr-sub">${esc(m.descriptor(agg))}</div>
+        <div class="chart-wrap"><canvas id="tr-c-${m.key}"></canvas></div>
+      </div>`;
+  }).join("");
+
+  TREND_METRICS.forEach((m) => trendChart(m, weeks, weekKpis.map(m.pick)));
+}
 
 function setView(view) {
   state.view = view;
