@@ -1041,6 +1041,10 @@ function renderTrends() {
   // aggregate (drives the headline values — same maths as the Overview cards).
   const weekKpis = weeks.map((w) => computeKpis(rowsForWeek(w)));
   const weeksSet = new Set(weeks);
+  // Intentionally drops rows with an empty `week` (unparseable date) — they
+  // can't sit on any weekly point, so folding them into the headline would make
+  // it exceed the sum of the visible line. With real (importer-bucketed) data
+  // every row has a week, so this equals the Overview KPI for the same scope.
   const rangeRows = weeklyScopeRows().filter((r) => r.week && weeksSet.has(r.week));
   const agg = computeKpis(rangeRows);
 
