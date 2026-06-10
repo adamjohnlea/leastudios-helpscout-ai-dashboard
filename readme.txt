@@ -4,7 +4,7 @@ Tags: helpscout, csv, dashboard, reporting
 Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 8.2
-Stable tag: 1.0.4
+Stable tag: 1.1.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -70,24 +70,29 @@ Deleting the plugin via the Plugins screen runs the uninstaller, which drops all
 
 == Changelog ==
 
+= 1.1.0 — 2026-06-10 =
+
+* Added: Trends tab — view all six headline KPIs (interactions, identified customers, resolution rate, escalation rate, satisfaction score, avg turns per session) as weekly trend charts over a shared 8w / 12w / 26w / All range control, scoped by the site switcher. Each card's headline aggregates over the visible range and matches the Overview KPI for the same scope; low-volume weeks render as gaps rather than misleading zeros.
+* Changed: consolidated the per-week trend charts that previously lived on the Overview and Weekly views ("Resolution rate by week", "Interactions by week", "Resolution & escalation rate by week") into the new Trends tab, so "metric over time" has a single home. The Weekly view keeps its single-week snapshot and multi-week comparison table.
+
 = 1.0.4 — 2026-05-24 =
 
 * Changed: hardened SQL construction across the plugin for Plugin Check compliance — `Importer::flush()` rewritten to use per-row inserts with fully-static prepare format strings (was bulk INSERT with `str_repeat()` placeholders). Table-name interpolations across the plugin converted to the `%i` placeholder (WordPress 6.2+). Unprefixed dashboard-template globals prefixed.
 * Internal: new `composer lint:db` tripwire (shared across the suite) blocks variable interpolation in `$wpdb` query construction; Plugin Check is now run against the release zip in CI to catch regressions before tag.
 * Docs: added developer handbook under `docs/developer-handbook.md`.
 
-= 1.0.3 =
+= 1.0.3 — 2026-05-23 =
 * Fix: derive `VERSION` constant from the plugin header so the runtime constant can never drift from the release-zip version.
 
-= 1.0.2 =
+= 1.0.2 — 2026-05-23 =
 * Fix: declare compatibility with WordPress 7.0.
 * Fix: bundle Chart.js locally to satisfy WordPress.org plugin guidelines.
 
-= 1.0.1 =
+= 1.0.1 — 2026-05-23 =
 * Fix: register `GET /reports` endpoint so the Reports page lists uploads.
 * Internal: tag-triggered release workflow with auto-generated notes.
 
-= 1.0.0 =
+= 1.0.0 — 2026-05-23 =
 * Initial public release. CSV ingestion with file-hash + per-row dedupe, three-table schema, Beacon → site Settings page, weekly per-site dashboard, and `wp lshsai import-file` / `wp lshsai import-folder` WP-CLI commands.
 
 == Upgrade Notice ==
