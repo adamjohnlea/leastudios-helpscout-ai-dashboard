@@ -27,3 +27,5 @@ build/
 # Environment
 .env
 .env.local
+
+.superpowers/
