@@ -1353,6 +1353,15 @@ function initWeeklyControls() {
   };
 }
 
+function initTrendsControls() {
+  document.querySelectorAll("#tr-range [data-range]").forEach((b) => {
+    b.onclick = () => {
+      state.trends.range = b.dataset.range;
+      renderTrends();
+    };
+  });
+}
+
 function populateSelectors() {
   const scope = siteRows();
   const types = [...new Set(scope.map((r) => r.type).filter(Boolean))].sort();
@@ -1611,6 +1620,7 @@ async function boot() {
   initActions();
   initViewTabs();
   initWeeklyControls();
+  initTrendsControls();
   render();
 
   // 3. If we rendered from cache, revalidate in the background.
