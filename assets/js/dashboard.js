@@ -28,7 +28,10 @@ const state = {
   page: 0, pageSize: 50,
   charts: {},
   expanded: new Set(),
-  view: "overview",     // "overview" | "weekly"
+  view: "overview",     // "overview" | "weekly" | "trends"
+  trends: {
+    range: "all",       // "8" | "12" | "26" | "all"
+  },
   weekly: {
     primary: null,      // week-ending date string (e.g. "2026-04-23")
     compareTo: "__prev",// "__prev" | specific week-ending date
@@ -997,10 +1000,13 @@ function renderWeekly() {
   renderWeeklyComments();
 }
 
+function renderTrends() { /* implemented in Task 2 */ }
+
 function setView(view) {
   state.view = view;
   document.getElementById("view-overview").style.display = (view === "overview") ? "" : "none";
   document.getElementById("view-weekly").style.display   = (view === "weekly") ? "" : "none";
+  document.getElementById("view-trends").style.display   = (view === "trends") ? "" : "none";
   document.querySelectorAll("#view-tabs button").forEach((b) => {
     b.classList.toggle("nav-tab-active", b.dataset.view === view);
   });
@@ -1008,7 +1014,9 @@ function setView(view) {
   // view also lazily initializes `state.weekly.primary` inside its picker —
   // run it first so the site-switcher counts (which depend on that selection)
   // are computed against the right scope.
-  if (view === "weekly") renderWeekly(); else render();
+  if (view === "weekly") renderWeekly();
+  else if (view === "trends") renderTrends();
+  else render();
   renderSiteSwitch();
 }
 
@@ -1165,7 +1173,9 @@ function renderSiteSwitch() {
       renderHeroMeta();
       // Run the active view first so Weekly can validate/re-init its primary
       // week, then refresh the site-switch counts against the new scope.
-      if (state.view === "weekly") renderWeekly(); else render();
+      if (state.view === "weekly") renderWeekly();
+      else if (state.view === "trends") renderTrends();
+      else render();
       renderSiteSwitch();
     };
   });

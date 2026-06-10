@@ -341,6 +341,42 @@ if ( ! defined( 'ABSPATH' ) ) {
 	::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 5px; }
 	::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.15); }
 
+	/* Trends tab */
+	.tr-controls {
+	display: flex; align-items: center; justify-content: space-between;
+	gap: 12px; flex-wrap: wrap; margin-bottom: 20px;
+	}
+	.tr-range {
+	display: inline-flex; padding: 4px; border-radius: 10px;
+	background: rgba(0,0,0,.25); border: 1px solid var(--panel-border); gap: 2px;
+	}
+	.tr-range button {
+	border: 0; background: transparent; color: var(--muted); cursor: pointer;
+	font: inherit; font-size: 12.5px; font-weight: 500; padding: 7px 14px;
+	border-radius: 8px; transition: all .15s ease;
+	}
+	.tr-range button:hover { color: var(--text); background: rgba(255,255,255,.04); }
+	.tr-range button.on {
+	background: linear-gradient(135deg, rgba(245,154,47,.28), rgba(229,113,52,.18));
+	color: #fff; box-shadow: inset 0 0 0 1px rgba(245,154,47,.45);
+	}
+	.tr-context { font-size: 11.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+	.tr-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	@media (max-width: 980px) { .tr-grid { grid-template-columns: 1fr 1fr; } }
+	@media (max-width: 640px) { .tr-grid { grid-template-columns: 1fr; } }
+	.tr-card {
+	background: var(--panel); border: 1px solid var(--panel-border); border-radius: 14px;
+	padding: 16px 18px; backdrop-filter: blur(12px); min-width: 0;
+	}
+	.tr-card .l { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 500; }
+	.tr-card .tr-row { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 2px; }
+	.tr-card .v { font-size: 24px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+	.tr-card .tr-sub { font-size: 10.5px; color: var(--dim); }
+	.tr-card .tr-d { font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+	.tr-card .tr-d.up { color: var(--good); }
+	.tr-card .tr-d.down { color: var(--bad); }
+	.tr-card .tr-d.flat { color: var(--muted); }
+	.tr-card .chart-wrap { height: 90px; margin-top: 10px; }
 
 	/* Session banner inside dark panel — explains drag-drop limits. */
 	.aiad-session-banner {
@@ -395,6 +431,7 @@ $leastudios_helpscout_ai_dashboard_settings_url = admin_url( 'admin.php?page=lea
 	<nav class="nav-tab-wrapper" id="view-tabs" aria-label="Dashboard views">
 	<button type="button" class="nav-tab nav-tab-active" data-view="overview">Overview</button>
 	<button type="button" class="nav-tab" data-view="weekly">Weekly</button>
+	<button type="button" class="nav-tab" data-view="trends">Trends</button>
 	</nav>
 
 	<div id="aiad-dashboard-root">
@@ -609,6 +646,20 @@ $leastudios_helpscout_ai_dashboard_settings_url = admin_url( 'admin.php?page=lea
 		</div>
 	</section>
 	</div><!-- /#view-weekly -->
+
+	<div id="view-trends" style="display:none;">
+		<section class="tr-controls">
+		<div class="tr-range" id="tr-range" role="group" aria-label="Trend range">
+			<button type="button" data-range="8">8w</button>
+			<button type="button" data-range="12">12w</button>
+			<button type="button" data-range="26">26w</button>
+			<button type="button" data-range="all" class="on">All</button>
+		</div>
+		<div class="tr-context" id="tr-context"></div>
+		</section>
+
+		<section class="grid tr-grid" id="tr-grid"></section>
+	</div><!-- /#view-trends -->
 
 	<div style="text-align: center; margin-top: 40px; color: var(--dim); font-size: 12px;">
 		<a href="#" id="link-top" style="color: var(--muted);">Back to top</a>
