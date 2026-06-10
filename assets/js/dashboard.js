@@ -1096,7 +1096,12 @@ function trendChart(m, weeks, points) {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: (c) => c.parsed.y == null ? "—" : (m.yPct ? c.parsed.y.toFixed(1) + "%" : fmt.int(c.parsed.y)) } },
+        tooltip: { callbacks: { label: (c) => {
+          if (c.parsed.y == null) return "—";
+          if (m.yPct) return c.parsed.y.toFixed(1) + "%";
+          if (m.integer) return fmt.int(c.parsed.y);
+          return c.parsed.y.toFixed(1);
+        } } },
       },
       scales: {
         x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 14 } },
