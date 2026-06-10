@@ -532,14 +532,10 @@ $leastudios_helpscout_ai_dashboard_settings_url = admin_url( 'admin.php?page=lea
 
 	<!-- FEEDBACK -->
 	<div class="section-title">Customer feedback</div>
-	<section class="grid row two-col">
+	<section class="grid">
 	<div class="aiad-panel">
 		<h3>Comments from rated sessions <span class="count" id="comments-meta"></span></h3>
 		<div class="comments" id="comments-list"></div>
-	</div>
-	<div class="aiad-panel">
-		<h3>Resolution rate by week</h3>
-		<div class="chart-wrap"><canvas id="c-resrate"></canvas></div>
 	</div>
 	</section>
 
@@ -614,18 +610,6 @@ $leastudios_helpscout_ai_dashboard_settings_url = admin_url( 'admin.php?page=lea
 		<div class="aiad-panel">
 		<h3>Customer rating</h3>
 		<div class="chart-wrap"><canvas id="wk-c-rating"></canvas></div>
-		</div>
-	</section>
-
-	<div class="section-title">Week-over-week trends</div>
-	<section class="grid row two-col">
-		<div class="aiad-panel tall">
-		<h3>Interactions by week</h3>
-		<div class="chart-wrap"><canvas id="wk-c-trend"></canvas></div>
-		</div>
-		<div class="aiad-panel tall">
-		<h3>Resolution &amp; escalation rate by week</h3>
-		<div class="chart-wrap"><canvas id="wk-c-rates"></canvas></div>
 		</div>
 	</section>
 

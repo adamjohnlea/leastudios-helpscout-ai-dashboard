@@ -399,48 +399,6 @@ function hBar(id, entries, color) {
   });
 }
 
-/* --- resolution rate by week line --- */
-function renderResRate(rows) {
-  destroy("resrate");
-  const byWeek = new Map();
-  for (const r of rows) {
-    const wk = weekKey(r.date); if (!wk) continue;
-    if (!byWeek.has(wk)) byWeek.set(wk, { h: 0, n: 0, e: 0 });
-    const b = byWeek.get(wk);
-    if (r.res === "Customer helped") b.h++;
-    else if (r.res === "Customer not helped") b.n++;
-    else if (r.res === "Escalation") b.e++;
-  }
-  const weeks = [...byWeek.keys()].sort();
-  const resData = weeks.map((w) => {
-    const b = byWeek.get(w); const tot = b.h + b.n + b.e;
-    return tot ? (b.h / tot) * 100 : null;
-  });
-  const escData = weeks.map((w) => {
-    const b = byWeek.get(w); const tot = b.h + b.n + b.e;
-    return tot ? (b.e / tot) * 100 : null;
-  });
-  state.charts.resrate = new Chart(mkCanvas("c-resrate"), {
-    type: "line",
-    data: {
-      labels: weeks,
-      datasets: [
-        { label: "Resolution rate", data: resData, borderColor: "#9ec14a", backgroundColor: "#9ec14a22",
-          tension: 0.3, fill: true, pointRadius: 3, pointHoverRadius: 5 },
-        { label: "Escalation rate", data: escData, borderColor: "#f0b140", backgroundColor: "#f0b14022",
-          tension: 0.3, fill: false, pointRadius: 3, pointHoverRadius: 5, borderDash: [4, 4] },
-      ],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      scales: {
-        y: { min: 0, max: 100, ticks: { callback: (v) => v + "%" }, grid: { color: "rgba(245,158,78,.06)" } },
-        x: { grid: { display: false } },
-      },
-    },
-  });
-}
-
 /* --- by hour of day / by day of week --- */
 function fmtHour12(h) {
   if (h === 0) return "12 AM";
@@ -847,59 +805,6 @@ function renderWeeklyDonuts() {
   donut("wk-c-rating", groupBy(rows.filter((r) => r.rating), (r) => r.rating), "rating");
 }
 
-function renderWeeklyTrend() {
-  // Interactions per week + rates per week across the last ~12 weeks.
-  const weeks = availableWeeks().slice(-12);
-  const counts = weeks.map((w) => rowsForWeek(w).length);
-  destroy("wk-trend");
-  state.charts["wk-trend"] = new Chart(mkCanvas("wk-c-trend"), {
-    type: "bar",
-    data: { labels: weeks, datasets: [{
-      label: "Interactions",
-      data: counts,
-      backgroundColor: weeks.map((w) => w === state.weekly.primary ? "#f59a2f" : "#f59a2f66"),
-      borderRadius: 4,
-    }]},
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 12 } },
-        y: { grid: { color: "rgba(245,158,78,.06)" }, beginAtZero: true, ticks: { precision: 0 } },
-      },
-    },
-  });
-
-  const resData = weeks.map((w) => {
-    const k = computeKpis(rowsForWeek(w));
-    return k.resRate == null ? null : k.resRate * 100;
-  });
-  const escData = weeks.map((w) => {
-    const k = computeKpis(rowsForWeek(w));
-    return k.escRate == null ? null : k.escRate * 100;
-  });
-  destroy("wk-rates");
-  state.charts["wk-rates"] = new Chart(mkCanvas("wk-c-rates"), {
-    type: "line",
-    data: {
-      labels: weeks,
-      datasets: [
-        { label: "Resolution rate", data: resData, borderColor: "#9ec14a", backgroundColor: "#9ec14a22",
-          tension: 0.3, fill: true, pointRadius: 3, pointHoverRadius: 5 },
-        { label: "Escalation rate", data: escData, borderColor: "#f0b140", backgroundColor: "#f0b14022",
-          tension: 0.3, fill: false, pointRadius: 3, pointHoverRadius: 5, borderDash: [4, 4] },
-      ],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      scales: {
-        y: { min: 0, max: 100, ticks: { callback: (v) => v + "%" }, grid: { color: "rgba(245,158,78,.06)" } },
-        x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 12 } },
-      },
-    },
-  });
-}
-
 function renderWeeklyCompareTable() {
   const primary = state.weekly.primary;
   const extras = [...state.weekly.extras].sort().reverse();
@@ -995,7 +900,6 @@ function renderWeekly() {
   renderWeeklyKpis();
   renderWeeklyDailyChart();
   renderWeeklyDonuts();
-  renderWeeklyTrend();
   renderWeeklyCompareTable();
   renderWeeklyComments();
 }
@@ -1193,7 +1097,6 @@ function render() {
 
   renderArticles(rows);
   renderComments(rows);
-  renderResRate(rows);
   renderTable(rows);
 }
 
